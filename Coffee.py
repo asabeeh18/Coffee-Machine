@@ -44,11 +44,14 @@ def fill_new_item(name, qt):
     Adds the new ingredient with some quantity
     :param name: Name of the new ingredient
     :param qt: Quantity to add for new ingredient
-    :return: None
+    :return: bool: True if ingredient is successfully added, False if the ingredient is not a new ingredient
     """
     with lock:
+        if name in quantities:
+            return False
         quantities[name] = qt
         time.sleep(5)
+        return True
 
 
 def change_quantity(ingred, amt):
@@ -90,12 +93,12 @@ def dispense(beverage):
     """
     try:
         lock.acquire()
-        a, low, miss = quantity_check(beverage)
-        if not a:
+        dispensable, low, miss = quantity_check(beverage)
+        if not dispensable:
             print_deficiency(beverage, low, miss)
             return False, low, miss
-        for k in recipes[beverage]:
-            change_quantity(k, -recipes[beverage][k])
+        for recipe in recipes[beverage]:
+            change_quantity(recipe, -recipes[beverage][recipe])
     finally:
         lock.release()
     print(beverage, ' is prepared')
@@ -120,22 +123,24 @@ def load_machine(confFile):
     return outlets
 
 
-def take_input(outlet, var, lim):
+#========Functions below this line are needed only when using the user interface========
+
+def take_input(outlet, var_type, lim):
     """
     Accepts the input form user and performs basic sanity check for integer values
     :param outlet: Outlet number from where input to take
-    :param var: THe datatype to accept
+    :param var_type: THe datatype to accept
     :param lim: ONly valid for integer, the max value to accept
     :return: data if it is proper, None if invalid data is entered
     """
-    x = input(str(outlet).join('>'))
+    user_input = input(str(outlet).join('>'))
     # do some sanity bare minimum sanity checks
-    if x.isnumeric() and isinstance(int(x), var):
-        x = int(x)
-        if 0 < x <= lim:
-            return x
-    elif isinstance(x, var):
-        return x
+    if user_input.isnumeric() and isinstance(int(user_input), var_type):
+        user_input = int(user_input)
+        if 0 < user_input <= lim:
+            return user_input
+    elif isinstance(user_input, var_type):
+        return user_input
     print('Invalid Input!!!')
     return None
 
@@ -147,17 +152,20 @@ def refill_item(outlet_num):
     :return: None
     """
     i = 1
+    # Use this dictionary to store the item number and the name, when user inputs a number
     user_dict = {}
     for k in quantities:
         print(i, " ", k, ' is ', quantities[k])
         user_dict[i] = k
         i += 1
-
     print(i, ". Add new item")
+
     sel = take_input(outlet_num, int, i)
     if sel is None:
         return
+
     if sel == i:
+        # User selects to add new ingredient
         print('Enter name: ')
         s = take_input(outlet_num, str, 0)
         if s is None:
@@ -171,6 +179,7 @@ def refill_item(outlet_num):
             return
         fill_new_item(s, q)
     else:
+        # User selects to refill an ingredient
         print('Add value: ')
         q = take_input(outlet_num, int, sys.maxsize)
         if q is None:
@@ -188,6 +197,7 @@ def user_menu(outlet_num):
     while True:
         print('===Taking from Outlet ', outlet_num, '===')
         i = 1
+        # Use this dictionary to store the item number and the name, to identify the item when user inputs a number
         user_dict = {}
         # User Menu
         for k in recipes:
@@ -199,8 +209,11 @@ def user_menu(outlet_num):
             user_dict[i] = k
             i += 1
         print(i, ". Refill")
+
         sel = take_input(outlet_num, int, i)
+
         if sel is i:
+            # User selects to refill
             refill_item(outlet_num)
         else:
             if dispense(user_dict[sel]):
